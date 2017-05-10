@@ -99,6 +99,7 @@ void * client_thread(void *cli)
 void add_client(int client_sock)
 {
 	static int anon_num;
+
 	if (num_of_clients >= MAXCLIENTS) {
 		char *full_msg = "S|Sorry, the server is full.";
 		send(client_sock, full_msg, sizeof(full_msg), 0);
@@ -106,20 +107,22 @@ void add_client(int client_sock)
 		return;
 	}
 
-	pthread_attr_init(&attr);
-	pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
-	
-	clients[num_of_clients].user_sock = client_sock;
-	clients[num_of_clients].cli_thread = pthread_create(&clients[num_of_clients].cli_thread,
-														&attr,
-														&client_thread,
-														&clients[num_of_clients]);
 	char anon_username[MAXUSERNAMESIZE] = "Anonymous #";
 	snprintf(anon_username+strlen(anon_username),
 				MAXUSERNAMESIZE-strlen(anon_username),
 				"%i",
 				(anon_num++ + 1));
+
+	pthread_attr_init(&attr);
+	pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
+
+	clients[num_of_clients].user_sock = client_sock;
+	clients[num_of_clients].cli_thread = pthread_create(&clients[num_of_clients].cli_thread,
+														&attr,
+														&client_thread,
+														&clients[num_of_clients]);
 	clients[num_of_clients].user_name = anon_username;
+
 	printf("%s (%i/%i) has connected.\n", anon_username, (num_of_clients++ + 1), MAXCLIENTS);
 }
 

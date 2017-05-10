@@ -26,9 +26,24 @@ struct client {
 
 struct client clients[MAXCLIENTS];
 
+void broadcast_message(char *msg, ...)
+{
+	va_list al;
+	
+	va_start(al, msg);
+	for (int i = 0; i < MAXCLIENTS; i++)
+		send(clients[i].user_sock, msg, sizeof(msg), 0);
+	va_end(al);
+}
+
 void disconnect_client(struct client cli)
 {
 	close(cli.user_sock);
+	char disc_msg[MAXBUFSIZE] = "S|";
+	strcat(disc_msg, cli.user_name);
+	strcat(disc_msg, " has disconnected.");
+	printf("%s\n", disc_msg+2);
+	broadcast_message(disc_msg);
 	num_of_clients--;
 }
 
@@ -42,16 +57,6 @@ void exit_server()
 	if (sock)
 		close(sock);
 	exit(0);
-}
-
-void broadcast_message(char *msg, ...)
-{
-	va_list al;
-	
-	va_start(al, msg);
-	for (int i = 0; i < MAXCLIENTS; i++)
-		send(clients[i].user_sock, msg, sizeof(msg), 0);
-	va_end(al);
 }
 
 void * client_thread(void *cli)

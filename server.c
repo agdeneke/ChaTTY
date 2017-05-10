@@ -137,7 +137,7 @@ int main (int argc, char *argv[])
 	server.sin_port = htons(PORT);
 	
 	if (bind(sock, (struct sockaddr *)&server, sizeof(struct sockaddr))) {
-		printf("Failed to bind to IP address %s on port %i: %s", 
+		printf("Failed to bind to IP address %s on port %i: %s\n", 
 				inet_ntoa(server.sin_addr), ntohs(server.sin_port), strerror(errno));
 		exit(1);
 	}

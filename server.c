@@ -31,7 +31,7 @@ struct client clients[MAXCLIENTS];
 void broadcast_message(char *msg, ...)
 {
 	va_list al;
-	
+
 	va_start(al, msg);
 	for (int i = 0; i < MAXCLIENTS; i++)
 		if (clients[i].user_sock != 0)
@@ -105,7 +105,7 @@ void add_client(int client_sock)
 		close(client_sock);
 		return;
 	}
-	
+
 	pthread_attr_init(&attr);
 	pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
 	
@@ -131,37 +131,37 @@ int main (int argc, char *argv[])
 			printf("%s\n", help);
 			exit(0);
 		}
-	
+
 	printf("Initializing ChaTTY server...\n");
-	
+
 	sock = socket(AF_INET, SOCK_STREAM, 0);
-	
+
 	signal(SIGINT, exit_server);
-	
+
 	struct sockaddr_in server;
 	server.sin_family = AF_INET;
 	server.sin_addr.s_addr = htonl(INADDR_ANY);
 	server.sin_port = htons(PORT);
-	
+
 	if (bind(sock, (struct sockaddr *)&server, sizeof(struct sockaddr))) {
 		printf("Failed to bind to IP address %s on port %i: %s\n", 
 				inet_ntoa(server.sin_addr), ntohs(server.sin_port), strerror(errno));
 		exit(1);
 	}
-		
+
 	printf("Bound to IP address %s on port %i\n",
 			inet_ntoa(server.sin_addr), ntohs(server.sin_port));
 	listen(sock, 1);
-	
+
 	num_of_clients = 0;
-	
+
 	int client_sock;
-	
+
 	while (1) {
 		client_sock = accept(sock, NULL, NULL);
 		add_client(client_sock);
 	}
-	
+
 	close(sock);
 	return 0;
 }

@@ -24,6 +24,8 @@ struct client {
 	pthread_t cli_thread;
 };
 
+pthread_attr_t attr;
+
 struct client clients[MAXCLIENTS];
 
 void broadcast_message(char *msg, ...)
@@ -65,6 +67,7 @@ void exit_server()
 	}
 	if (sock)
 		close(sock);
+	pthread_attr_destroy(&attr);
 	exit(0);
 }
 
@@ -102,9 +105,13 @@ void add_client(int client_sock)
 		close(client_sock);
 		return;
 	}
+	
+	pthread_attr_init(&attr);
+	pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
+	
 	clients[num_of_clients].user_sock = client_sock;
 	clients[num_of_clients].cli_thread = pthread_create(&clients[num_of_clients].cli_thread,
-														NULL,
+														&attr,
 														&client_thread,
 														&clients[num_of_clients]);
 	char anon_username[MAXUSERNAMESIZE] = "Anonymous #";

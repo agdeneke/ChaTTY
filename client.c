@@ -53,15 +53,15 @@ int main (int argc, char *argv[])
 	send(sock, username, sizeof(username), 0);
 
 	initscr();
-	WINDOW *input_window = newwin(0, 0, 0, 0);
+	WINDOW *chat_window = newwin(0, 0, 0, 0);
 
 	while (1) {
 		char msg[MAXBUFSIZE];
 		if (recv(sock, &msg, sizeof(msg), 0) <= 0)
 			exit_client();
 		if (!strncmp(msg, "S|", 2)) {
-			wprintw(input_window, "%s", msg+2);
-			wrefresh(input_window);
+			wprintw(chat_window, "%s", msg+2);
+			wrefresh(chat_window);
 		}
 	}
 

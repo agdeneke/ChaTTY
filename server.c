@@ -35,7 +35,7 @@ void broadcast_message(char *msg, ...)
 	va_start(al, msg);
 	for (int i = 0; i < MAXCLIENTS; i++)
 		if (clients[i].user_sock != 0)
-			send(clients[i].user_sock, msg, strlen(msg), 0);
+			send(clients[i].user_sock, msg, strlen(msg)+1, 0);
 	va_end(al);
 }
 

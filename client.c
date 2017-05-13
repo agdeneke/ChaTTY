@@ -63,6 +63,10 @@ int main (int argc, char *argv[])
 			wprintw(chat_window, "%s", msg+2);
 			wrefresh(chat_window);
 		}
+		if (!strncmp(msg, "M|", 2)) {
+			wprintw(chat_window, "%s", msg+2);
+			wrefresh(chat_window);
+		}
 	}
 
 	return 0;

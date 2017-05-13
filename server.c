@@ -33,9 +33,18 @@ void broadcast_message(char *msg, ...)
 	va_list al;
 
 	va_start(al, msg);
-	for (int i = 0; i < MAXCLIENTS; i++)
+
+	char final_msg[MAXBUFSIZE];
+	char *user_name = va_arg(al, char *);
+
+	for (int i = 0; i < MAXCLIENTS; i++) {
+		strcat(final_msg, "[");
+		strcat(final_msg, user_name);
+		strcat(final_msg, "] ");
+		strcat(final_msg, msg);
 		if (clients[i].user_sock != 0)
-			send(clients[i].user_sock, msg, strlen(msg)+1, 0);
+			send(clients[i].user_sock, final_msg, strlen(final_msg)+1, 0);
+	}
 	va_end(al);
 }
 

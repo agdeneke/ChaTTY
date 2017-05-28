@@ -28,19 +28,11 @@ pthread_attr_t attr;
 
 struct client clients[MAXCLIENTS];
 
-void broadcast_message(char *msg, char message_type)
+void broadcast_message(char *msg)
 {
-	char final_msg[MAXBUFSIZE] = "";
-
-	if (message_type) {
-		strcat(final_msg, &message_type);
-		strcat(final_msg, "|");
-	}
-	strcat(final_msg, msg);
-
 	for (int i = 0; i < MAXCLIENTS; i++) {
 		if (clients[i].user_sock != 0)
-			send(clients[i].user_sock, final_msg, strlen(final_msg)+1, 0);
+			send(clients[i].user_sock, msg, strlen(msg)+1, 0);
 	}
 }
 
@@ -57,7 +49,7 @@ void disconnect_client(struct client cli)
 	cli.cli_thread = 0;
 
 	printf("%s\n", disc_msg+2);
-	broadcast_message(disc_msg, 0);
+	broadcast_message(disc_msg);
 
 	num_of_clients--;
 }
@@ -92,7 +84,7 @@ void * client_thread(void *cli)
 			strcat(user_msg, "] ");
 			strcat(user_msg, msg+2);
 			printf("%s\n", user_msg+2);
-			broadcast_message(user_msg, 0);
+			broadcast_message(user_msg);
 		}
 		if (!strncmp(msg, "U|", 2)) {
 			char name_change_msg[MAXBUFSIZE] = "S|";
@@ -101,7 +93,7 @@ void * client_thread(void *cli)
 			strcpy(cl->user_name, msg+2);
 			strcat(name_change_msg, cl->user_name);
 			printf("%s\n", name_change_msg+2);
-			broadcast_message(name_change_msg, 0);
+			broadcast_message(name_change_msg);
 		}
 	}
 	return NULL;
@@ -110,6 +102,7 @@ void * client_thread(void *cli)
 void add_client(int client_sock)
 {
 	static int anon_num;
+	char connect_msg[MAXBUFSIZE] = "S|";
 
 	if (num_of_clients >= MAXCLIENTS) {
 		char *full_msg = "S|Sorry, the server is full.";
@@ -134,7 +127,10 @@ void add_client(int client_sock)
 														&clients[num_of_clients]);
 	strcpy(clients[num_of_clients].user_name, anon_username);
 
-	printf("%s (%i/%i) has connected.\n", anon_username, (num_of_clients++ + 1), MAXCLIENTS);
+	snprintf(connect_msg+2, MAXBUFSIZE, "%s (%i/%i) has connected.", anon_username, (num_of_clients++ + 1), MAXCLIENTS);
+
+	printf("%s\n", connect_msg+2);
+	broadcast_message(connect_msg);
 }
 
 int main (int argc, char *argv[])

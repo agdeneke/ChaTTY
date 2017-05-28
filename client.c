@@ -19,8 +19,7 @@ int sock;
 
 pthread_t in_thread;
 
-WINDOW *chat_window;
-WINDOW *input_window;
+WINDOW *chat_window_border, *chat_window, *input_window_border, *input_window;
 
 void exit_client()
 {
@@ -31,7 +30,6 @@ void exit_client()
 
 void * input_thread()
 {
-/* TODO: The form corrupts the screen. */ 
 	int ch;
 	char *msg;
 	char final_msg[MAXBUFSIZE] = "M|";
@@ -42,12 +40,11 @@ void * input_thread()
 
 	FORM *message_form = new_form(fields);
 	post_form(message_form);
-
-	wrefresh(chat_window);
-	wrefresh(input_window);
+	
+	field_opts_on(fields[0], O_VISIBLE);
 
 	while (1) {
-		ch = getch();
+		ch = wgetch(input_window);
 		switch (ch) {
 			case '\n':
 				form_driver(message_form, REQ_NEXT_FIELD);
@@ -55,16 +52,31 @@ void * input_thread()
 				form_driver(message_form, REQ_PREV_FIELD);
 				form_driver(message_form, REQ_CLR_FIELD);
 
-				for (int i = strlen(msg); i > 0; i--)
-					if (*(msg+i) == ' ' && *(msg+i-1) == ' ')
+				for (int i = strlen(msg); i >= 0; i--)
+					if (*(msg+i) == ' ' && (i == 0 || *(msg+i-1) == ' '))
 						*(msg+i) = '\0';
+
+				if (strlen(msg) == 0)		
+					break;
+
 				strncat(final_msg, msg, MAXBUFSIZE);
 				send(sock, final_msg, strlen(final_msg), 0);
+				final_msg[2] = '\0';
+
+				// TODO: Clear the message field when message is sent.
+
+				break;
+			case 127:
+				form_driver(message_form, REQ_DEL_PREV);
+				break;
+			case KEY_LEFT:
+				form_driver(message_form, REQ_PREV_CHAR);
+				break;
+			case KEY_RIGHT:
+				form_driver(message_form, REQ_NEXT_CHAR);
 				break;
 			default:
 				form_driver(message_form, ch);
-				wrefresh(chat_window);
-				wrefresh(input_window);
 				break;
 		}
 	}
@@ -79,8 +91,6 @@ int main (int argc, char *argv[])
 		printf("%s\n", help);
 		exit(1);
 	}
-
-	printf("ChaTTY\n");
 
 	sock = socket(AF_INET, SOCK_STREAM, 0);
 
@@ -103,16 +113,19 @@ int main (int argc, char *argv[])
 	send(sock, username, sizeof(username), 0);
 
 	initscr();
-	chat_window = newwin(LINES-6, 0, 0, 0);
-	input_window = newwin(5, 0, LINES-6, 0);
+	nocbreak();
 
-	wborder(chat_window, 0, 0, 0, 0, 0, 0, 0, 0);
-	wborder(input_window, 0, 0, 0, 0, 0, 0, 0, 0);
+	chat_window_border = newwin(LINES-6, 0, 0, 0);
+	chat_window = derwin(chat_window_border, LINES-8, COLS-2, 1, 1);
 
-	wmove(input_window, 1, 1);
+	input_window_border = newwin(5, 0, LINES-6, 0);
+	input_window = derwin(input_window_border, 3, COLS-2, 1, 1);
 
-	wrefresh(chat_window);
-	wrefresh(input_window);
+	wborder(chat_window_border, 0, 0, 0, 0, 0, 0, 0, 0);
+	wborder(input_window_border, 0, 0, 0, 0, 0, 0, 0, 0);
+
+	wrefresh(chat_window_border);
+	wrefresh(input_window_border);
 
 	in_thread = pthread_create(&in_thread, NULL, input_thread, NULL);
 
@@ -122,19 +135,17 @@ int main (int argc, char *argv[])
 			wprintw(chat_window, "Lost connection to server.\n");
 			break;
 		}
-		wmove(chat_window, 1, 1);
 		if (!strncmp(msg, "S|", 2)) {
 			wprintw(chat_window, "%s\n", msg+2);
 		}
 		if (!strncmp(msg, "M|", 2)) {
 			wprintw(chat_window, "%s\n", msg+2);
 		}
-		wmove(input_window, 1, 1);
 		wrefresh(chat_window);
 		wrefresh(input_window);
 	}
 
-	/* TODO: Wait for user input. */
+	// TODO: Wait for user to exit.
 	sleep(2);
 	exit_client();
 

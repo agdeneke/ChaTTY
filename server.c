@@ -28,12 +28,40 @@ pthread_attr_t attr;
 
 struct client clients[MAXCLIENTS];
 
+FILE *log_file;
+
 void broadcast_message(char *msg)
 {
 	for (int i = 0; i < MAXCLIENTS; i++) {
 		if (clients[i].user_sock != 0)
+			// TODO: Log messages.
 			send(clients[i].user_sock, msg, strlen(msg)+1, 0);
 	}
+}
+
+void change_username(struct client *cli, char *new_username)
+{
+	char name_change_msg[MAXBUFSIZE] = "S|";
+	
+	if (strlen(new_username) > MAXUSERNAMESIZE) {
+		strcat(name_change_msg, "Your username is too large.");
+		send(cli->user_sock, name_change_msg, strlen(name_change_msg)+1, 0);
+		return;
+	}
+	for (int i = 0; i < MAXCLIENTS; i++) {
+		if (!strcmp(clients[i].user_name, new_username)) {
+			strcat(name_change_msg, "Your username is already used.");
+			send(cli->user_sock, name_change_msg, strlen(name_change_msg)+1, 0);
+			return;
+		}
+	}
+	
+	strcat(name_change_msg, cli->user_name);
+	strcat(name_change_msg, " has changed their name to ");
+	strcpy(cli->user_name, new_username);
+	strcat(name_change_msg, cli->user_name);
+	printf("%s\n", name_change_msg+2);
+	broadcast_message(name_change_msg);
 }
 
 void disconnect_client(struct client cli)
@@ -62,9 +90,13 @@ void exit_server()
 			disconnect_client(clients[i]);
 		pthread_cancel(clients[i].cli_thread);
 	}
+
 	if (sock)
 		close(sock);
+	if (log_file)
+		fclose(log_file);
 	pthread_attr_destroy(&attr);
+
 	exit(0);
 }
 
@@ -78,7 +110,7 @@ void * client_thread(void *cli)
 			pthread_exit(NULL);
 		}
 		if (!strncmp(msg, "M|", 2)) {
-			char user_msg[MAXBUFSIZE] = "M|";
+			char user_msg[MAXBUFSIZE] = "S|";
 			strcat(user_msg, "[");
 			strcat(user_msg, cl->user_name);
 			strcat(user_msg, "] ");
@@ -87,13 +119,7 @@ void * client_thread(void *cli)
 			broadcast_message(user_msg);
 		}
 		if (!strncmp(msg, "U|", 2)) {
-			char name_change_msg[MAXBUFSIZE] = "S|";
-			strcat(name_change_msg, cl->user_name);
-			strcat(name_change_msg, " has changed their name to ");
-			strcpy(cl->user_name, msg+2);
-			strcat(name_change_msg, cl->user_name);
-			printf("%s\n", name_change_msg+2);
-			broadcast_message(name_change_msg);
+			change_username(cl, msg+2);
 		}
 	}
 	return NULL;
@@ -142,11 +168,13 @@ int main (int argc, char *argv[])
 			exit(0);
 		}
 
+	log_file = fopen("server.log", "w");
+
 	printf("Initializing ChaTTY server...\n");
 
-	sock = socket(AF_INET, SOCK_STREAM, 0);
-
 	signal(SIGINT, exit_server);
+
+	sock = socket(AF_INET, SOCK_STREAM, 0);
 
 	struct sockaddr_in server;
 	server.sin_family = AF_INET;

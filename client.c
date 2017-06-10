@@ -26,8 +26,10 @@ FILE *log_file;
 void exit_client()
 {
 	endwin();
-	if (sock)
+	if (sock) {
+		send(sock, "D", strlen("D"), 0);
 		close(sock);
+	}
 	if (log_file)
 		fclose(log_file);
 	exit(0);
@@ -41,8 +43,12 @@ void interface_init()
 	chat_window_border = newwin(LINES-6, 0, 0, 0);
 	chat_window = derwin(chat_window_border, LINES-8, COLS-2, 1, 1);
 
+	scrollok(chat_window, TRUE);
+
 	input_window_border = newwin(5, 0, LINES-6, 0);
 	input_window = derwin(input_window_border, 3, COLS-2, 1, 1);
+
+	scrollok(input_window, TRUE);
 
 	wborder(chat_window_border, 0, 0, 0, 0, 0, 0, 0, 0);
 	wborder(input_window_border, 0, 0, 0, 0, 0, 0, 0, 0);
@@ -63,7 +69,7 @@ void * input_thread()
 
 	FORM *message_form = new_form(fields);
 	post_form(message_form);
-	
+
 	field_opts_on(fields[0], O_VISIBLE);
 
 	while (1) {
@@ -117,7 +123,7 @@ int main (int argc, char *argv[])
 
 	signal(SIGINT, exit_client);
 
-	log_file = fopen("server.log", "w");
+	log_file = fopen("client.log", "w");
 
 	sock = socket(AF_INET, SOCK_STREAM, 0);
 
@@ -147,7 +153,7 @@ int main (int argc, char *argv[])
 
 	interface_init();
 
-	in_thread = pthread_create(&in_thread, NULL, input_thread, NULL);
+	pthread_create(&in_thread, NULL, input_thread, NULL);
 
 	while (1) {
 		char msg[MAXBUFSIZE];
@@ -161,7 +167,6 @@ int main (int argc, char *argv[])
 			} else if (msg[length-1] == '\0')
 				break;
 		}
-
 		// TODO: Log chat window.
 		message_received:
 		if (!strncmp(msg, "S|", 2)) {
@@ -172,14 +177,13 @@ int main (int argc, char *argv[])
 
 		for (int i = 0; i < length-1; i++)
 			if (msg[i] == '\0') {
-				strcpy(msg, msg+i+1);
+				memmove(msg, msg+i+1, strlen(msg+i+1)+1);
 				length = strlen(msg+1);
 				goto message_received;
 			}
 	}
 
 	// TODO: Wait for user to exit.
-	// TODO: Delete input window.
 	disconnect:
 	pthread_cancel(in_thread);
 

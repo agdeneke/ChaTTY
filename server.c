@@ -27,21 +27,21 @@ struct client {
 enum disc_reason {
 	disc_leave,
 	disc_crash,
-	disc_server_shutdown,
-	disc_other
+	disc_kicked
 };
 
 pthread_attr_t attr;
 
 struct client clients[MAXCLIENTS];
 
-FILE *log_file;
+FILE *log_file, *users_file;
 
 void printf_log(const char *message)
 {
 	printf("%s\n", message);
 	fwrite(message, sizeof(char), strlen(message), log_file);
 	fwrite("\n", sizeof(char), 1, log_file);
+	fflush(log_file);
 }
 
 void broadcast_message(char *msg)
@@ -89,8 +89,8 @@ void disconnect_client(struct client *cli, enum disc_reason reason, ...)
 		strcat(disc_msg, "Left");
 	else if (reason == disc_crash)
 		strcat(disc_msg, "Crashed");
-	else if (reason == disc_server_shutdown)
-		strcat(disc_msg, "Server shutting down");
+	else if (reason == disc_kicked)
+		strcat(disc_msg, "Kicked");
 
 	strcat(disc_msg, "}");
 
@@ -109,14 +109,16 @@ void exit_server()
 	printf_log("\nShutting down server...");
 	for (int i = 0; i < MAXCLIENTS; i++) {
 		if (clients[i].user_sock != 0)
-			disconnect_client(&clients[i], disc_server_shutdown);
+			disconnect_client(&clients[i], disc_kicked);
 		pthread_cancel(clients[i].cli_thread);
 	}
 
 	if (sock)
 		close(sock);
-	if (log_file)
+	if (log_file != NULL)
 		fclose(log_file);
+	if (users_file != NULL)
+		fclose(users_file);
 	pthread_attr_destroy(&attr);
 
 	exit(0);
@@ -197,6 +199,13 @@ int main (int argc, char *argv[])
 		}
 
 	log_file = fopen("server.log", "w");
+
+	// TODO: Implement logged-in users & moderators.
+	if ((users_file = fopen("users.txt", "r+")) == NULL)
+		if ((users_file = fopen("users.txt", "w+")) == NULL) {
+			printf_log("Failed to open/create users.txt file.");
+			exit(1);
+		}
 
 	printf_log("Initializing ChaTTY server...");
 

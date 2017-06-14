@@ -167,7 +167,7 @@ int main (int argc, char *argv[])
 			} else if (msg[length-1] == '\0')
 				break;
 		}
-		// TODO: Log chat window.
+		// TODO: Log chat window in client.
 		message_received:
 		if (!strncmp(msg, "S|", 2)) {
 			wprintw(chat_window, "%s\n", msg+2);
@@ -183,7 +183,7 @@ int main (int argc, char *argv[])
 			}
 	}
 
-	// TODO: Wait for user to exit.
+	// TODO: Wait for client user to send SIGINT.
 	disconnect:
 	pthread_cancel(in_thread);
 

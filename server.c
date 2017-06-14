@@ -20,6 +20,7 @@ int num_of_clients;
 
 struct client {
 	int user_sock;
+	struct sockaddr_in client_addr;
 	char user_name[MAXUSERNAMESIZE];
 	pthread_t cli_thread;
 };
@@ -79,9 +80,10 @@ void change_username(struct client *cli, char *new_username)
 
 void disconnect_client(struct client *cli, enum disc_reason reason, ...)
 {
+	char disc_msg[MAXBUFSIZE] = "S|";
+
 	close(cli->user_sock);
 
-	char disc_msg[MAXBUFSIZE] = "S|";
 	strcat(disc_msg, cli->user_name);
 	strcat(disc_msg, " has disconnected. (");
 
@@ -92,11 +94,9 @@ void disconnect_client(struct client *cli, enum disc_reason reason, ...)
 	else if (reason == disc_kicked)
 		strcat(disc_msg, "Kicked");
 
-	strcat(disc_msg, "}");
+	strcat(disc_msg, ")");
 
-	cli->user_sock = 0;
-	cli->user_name[0] = '\0';
-	cli->cli_thread = 0;
+	memset(cli, '\0', sizeof(*cli));
 
 	printf_log(disc_msg+2);
 	broadcast_message(disc_msg);
@@ -127,8 +127,9 @@ void exit_server()
 void * client_thread(void *cli)
 {
 	struct client *cl = cli;
+	char msg[MAXBUFSIZE] = "";
+
 	while (1) {
-		char msg[MAXBUFSIZE] = "";
 		if (recv(cl->user_sock, &msg, sizeof(msg), 0) <= 0) {
 			disconnect_client(cl, disc_crash);
 			pthread_exit(NULL);
@@ -146,17 +147,19 @@ void * client_thread(void *cli)
 			printf_log(user_msg+2);
 			broadcast_message(user_msg);
 		}
-		if (!strncmp(msg, "U|", 2)) {
-			change_username(cl, msg+2);
-		}
 	}
 	return NULL;
 }
 
-void add_client(int client_sock)
+void add_client(int client_sock, struct sockaddr_in client_addr)
 {
 	static int anon_num;
+	int recv_len;
+	char connect_msg_ip[MAXBUFSIZE];
 	char connect_msg[MAXBUFSIZE] = "S|";
+	char msg[MAXUSERNAMESIZE+2];
+	char user_name[MAXUSERNAMESIZE];
+	char anon_user_name[MAXUSERNAMESIZE] = "Anonymous #";
 
 	if (num_of_clients >= MAXCLIENTS) {
 		char *full_msg = "S|Sorry, the server is full.";
@@ -165,24 +168,44 @@ void add_client(int client_sock)
 		return;
 	}
 
-	char anon_username[MAXUSERNAMESIZE] = "Anonymous #";
-	snprintf(anon_username+strlen(anon_username),
-				MAXUSERNAMESIZE-strlen(anon_username),
+	// TODO: add_client() doesn't validate a username's size and if it
+	//			is being used.
+
+	recv_len = recv(client_sock, &msg, sizeof(msg), MSG_DONTWAIT);
+
+	if (recv_len <= 0 &&
+			errno != EWOULDBLOCK) {
+		close(client_sock);
+		return;
+	} else if (recv_len > 0) {
+		if (!strncmp(msg, "U|", 2)) {
+			strcpy(user_name, msg+2);
+			goto user_name_chosen;
+		}
+	}
+
+	snprintf(anon_user_name+strlen(anon_user_name),
+				MAXUSERNAMESIZE-strlen(anon_user_name),
 				"%i",
 				(anon_num++ + 1));
+
+	user_name_chosen:
 
 	pthread_attr_init(&attr);
 	pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
 
 	clients[num_of_clients].user_sock = client_sock;
+	clients[num_of_clients].client_addr = client_addr;
 	pthread_create(&clients[num_of_clients].cli_thread,
 				   &attr,
 				   &client_thread,
 				   &clients[num_of_clients]);
-	strcpy(clients[num_of_clients].user_name, anon_username);
+	strcpy(clients[num_of_clients].user_name, user_name);
 
-	snprintf(connect_msg+2, MAXBUFSIZE-2, "%s (%i/%i) has connected.", anon_username, (num_of_clients++ + 1), MAXCLIENTS);
+	snprintf(connect_msg_ip, MAXBUFSIZE, "Client %s is connecting as %s", inet_ntoa(clients[num_of_clients].client_addr.sin_addr), user_name);
+	printf_log(connect_msg_ip);
 
+	snprintf(connect_msg+2, MAXBUFSIZE-2, "%s (%i/%i) has connected.", user_name, (num_of_clients++ + 1), MAXCLIENTS);
 	printf_log(connect_msg+2);
 	broadcast_message(connect_msg);
 }
@@ -190,6 +213,9 @@ void add_client(int client_sock)
 int main (int argc, char *argv[])
 {
 	char message[MAXBUFSIZE];
+	struct sockaddr_in server;
+	int client_sock;
+	struct sockaddr_in client_addr;
 
 	if (argc > 1)
 		if (!strcmp(argv[1], "--help")) {
@@ -200,7 +226,8 @@ int main (int argc, char *argv[])
 
 	log_file = fopen("server.log", "w");
 
-	// TODO: Implement logged-in users & moderators.
+	// TODO: Add logged-in users.
+	// TODO: Add moderators.
 	if ((users_file = fopen("users.txt", "r+")) == NULL)
 		if ((users_file = fopen("users.txt", "w+")) == NULL) {
 			printf_log("Failed to open/create users.txt file.");
@@ -213,7 +240,6 @@ int main (int argc, char *argv[])
 
 	sock = socket(AF_INET, SOCK_STREAM, 0);
 
-	struct sockaddr_in server;
 	server.sin_family = AF_INET;
 	server.sin_addr.s_addr = htonl(INADDR_ANY);
 	server.sin_port = htons(PORT);
@@ -232,13 +258,12 @@ int main (int argc, char *argv[])
 
 	num_of_clients = 0;
 
-	int client_sock;
+	socklen_t client_addr_len = sizeof(client_addr);
 
 	while (1) {
-		client_sock = accept(sock, NULL, NULL);
-		add_client(client_sock);
+		client_sock = accept(sock, (struct sockaddr *)&client_addr, &client_addr_len);
+		add_client(client_sock, client_addr);
 	}
 
-	close(sock);
 	return 0;
 }

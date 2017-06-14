@@ -127,9 +127,10 @@ void exit_server()
 void * client_thread(void *cli)
 {
 	struct client *cl = cli;
-	char msg[MAXBUFSIZE] = "";
 
 	while (1) {
+		char msg[MAXBUFSIZE] = "";
+
 		if (recv(cl->user_sock, &msg, sizeof(msg), 0) <= 0) {
 			disconnect_client(cl, disc_crash);
 			pthread_exit(NULL);

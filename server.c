@@ -53,32 +53,21 @@ void broadcast_message(char *msg)
 	}
 }
 
-void change_username(struct client *cli, char *new_username)
+int set_username(struct client *cli, char *user_name)
 {
-	char name_change_msg[MAXBUFSIZE] = "S|";
-	
-	if (strlen(new_username) > MAXUSERNAMESIZE) {
-		strcat(name_change_msg, "Your username is too large.");
-		send(cli->user_sock, name_change_msg, strlen(name_change_msg)+1, 0);
-		return;
-	}
-	for (int i = 0; i < MAXCLIENTS; i++) {
-		if (!strcmp(clients[i].user_name, new_username)) {
-			strcat(name_change_msg, "Your username is already used.");
-			send(cli->user_sock, name_change_msg, strlen(name_change_msg)+1, 0);
-			return;
-		}
-	}
+	if (strlen(user_name) > MAXUSERNAMESIZE)
+		return 1;
 
-	strcat(name_change_msg, cli->user_name);
-	strcat(name_change_msg, " has changed their name to ");
-	strcpy(cli->user_name, new_username);
-	strcat(name_change_msg, cli->user_name);
-	printf_log(name_change_msg+2);
-	broadcast_message(name_change_msg);
+	for (int i = 0; i < MAXCLIENTS; i++)
+		if (!strcmp(clients[i].user_name, user_name))
+			return 2;
+
+	strcpy(cli->user_name, user_name);
+
+	return 0;
 }
 
-void disconnect_client(struct client *cli, enum disc_reason reason, ...)
+void disconnect_client(struct client *cli, enum disc_reason reason)
 {
 	char disc_msg[MAXBUFSIZE] = "S|";
 
@@ -157,7 +146,7 @@ void add_client(int client_sock, struct sockaddr_in client_addr)
 	static int anon_num;
 	int recv_len;
 	char connect_msg_ip[MAXBUFSIZE];
-	char connect_msg[MAXBUFSIZE] = "S|";
+	char connect_msg[MAXBUFSIZE];
 	char msg[MAXUSERNAMESIZE+2];
 	char user_name[MAXUSERNAMESIZE];
 	char anon_user_name[MAXUSERNAMESIZE] = "Anonymous #";
@@ -169,29 +158,6 @@ void add_client(int client_sock, struct sockaddr_in client_addr)
 		return;
 	}
 
-	// TODO: add_client() doesn't validate a username's size and if it
-	//			is being used.
-
-	recv_len = recv(client_sock, &msg, sizeof(msg), MSG_DONTWAIT);
-
-	if (recv_len <= 0 &&
-			errno != EWOULDBLOCK) {
-		close(client_sock);
-		return;
-	} else if (recv_len > 0) {
-		if (!strncmp(msg, "U|", 2)) {
-			strcpy(user_name, msg+2);
-			goto user_name_chosen;
-		}
-	}
-
-	snprintf(anon_user_name+strlen(anon_user_name),
-				MAXUSERNAMESIZE-strlen(anon_user_name),
-				"%i",
-				(anon_num++ + 1));
-
-	user_name_chosen:
-
 	pthread_attr_init(&attr);
 	pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
 
@@ -201,12 +167,47 @@ void add_client(int client_sock, struct sockaddr_in client_addr)
 				   &attr,
 				   &client_thread,
 				   &clients[num_of_clients]);
-	strcpy(clients[num_of_clients].user_name, user_name);
+
+	recv_len = recv(client_sock, &msg, sizeof(msg), MSG_DONTWAIT);
+
+	if (recv_len <= 0 &&
+			errno != EWOULDBLOCK) {
+		close(client_sock);
+		return;
+	} else if (errno == EWOULDBLOCK) {
+		char name_set_error_msg[MAXBUFSIZE] = "S|";
+		snprintf(anon_user_name+strlen(anon_user_name),
+					MAXUSERNAMESIZE-strlen(anon_user_name),
+					"%i",
+					(anon_num++ + 1));
+		set_username(&clients[num_of_clients], anon_user_name);
+		strcpy(user_name, anon_user_name);
+	} else if (recv_len > 0) {
+		if (!strncmp(msg, "U|", 2)) {
+			int ret = set_username(&clients[num_of_clients], msg+2);
+			if (ret != 0) {
+				char name_set_error_msg[MAXBUFSIZE] = "S|";
+				snprintf(anon_user_name+strlen(anon_user_name),
+							MAXUSERNAMESIZE-strlen(anon_user_name),
+							"%i",
+							(anon_num++ + 1));
+				set_username(&clients[num_of_clients], anon_user_name);
+				strcpy(user_name, anon_user_name);
+				if (ret == 1)
+					strcat(name_set_error_msg, "Your username is too large.");
+				else if (ret == 2)
+					strcat(name_set_error_msg, "Your username is already used.");
+				send(client_sock, name_set_error_msg, strlen(name_set_error_msg)+1, 0);
+			} else {
+				strcpy(user_name, msg+2);
+			}
+		}
+	}
 
 	snprintf(connect_msg_ip, MAXBUFSIZE, "Client %s is connecting as %s", inet_ntoa(clients[num_of_clients].client_addr.sin_addr), user_name);
 	printf_log(connect_msg_ip);
 
-	snprintf(connect_msg+2, MAXBUFSIZE-2, "%s (%i/%i) has connected.", user_name, (num_of_clients++ + 1), MAXCLIENTS);
+	snprintf(connect_msg, MAXBUFSIZE, "S|%s (%i/%i) has connected.", user_name, (num_of_clients++ + 1), MAXCLIENTS);
 	printf_log(connect_msg+2);
 	broadcast_message(connect_msg);
 }
@@ -225,6 +226,7 @@ int main (int argc, char *argv[])
 			exit(0);
 		}
 
+	// TODO: Log times.
 	log_file = fopen("server.log", "w");
 
 	// TODO: Add logged-in users.

@@ -1,7 +1,14 @@
+Server:
+
 - Add user commands.
-- Use UTF-8 for chat messages.
 - Add logged-in users.
 - Add moderators.
+
+Client:
+
+- Use UTF-8 for chat messages.
 - Log chat window in client.
 - Wait for client user to send SIGINT before exiting client.
-- add_client() doesn't check a custom username's size and usage.
+
+Both:
+- Log times.

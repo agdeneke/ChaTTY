@@ -3,19 +3,19 @@ CPPFLAGS = -pthread
 LDFLAGS  = -pthread
 LDLIBS   = -lncurses -lform
 
-all: client server
+all: chatty-cli chatty-serv
 
-client: client.o
-	$(CC) $(LDFLAGS) -o client client.o $(LDLIBS)
+chatty-cli: client.o
+	$(CC) $(LDFLAGS) -o chatty-cli client.o $(LDLIBS)
 
 client.o: client.c
 	$(CC) $(CFLAGS) $(CPPFLAGS) -c client.c
 
-server: server.o
-	$(CC) $(LDFLAGS) -o server server.o
+chatty-serv: server.o
+	$(CC) $(LDFLAGS) -o chatty-serv server.o
 
 server.o: server.c
 	$(CC) $(CFLAGS) $(LDFLAGS) -c server.c
 
 clean:
-	rm client server *.o
+	rm chatty-cli chatty-serv *.o

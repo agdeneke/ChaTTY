@@ -123,6 +123,8 @@ int main (int argc, char *argv[])
 
 	signal(SIGINT, exit_client);
 
+	// TODO: Log chat window in client.
+	// TODO: Log times.
 	log_file = fopen("client.log", "w");
 
 	sock = socket(AF_INET, SOCK_STREAM, 0);
@@ -167,7 +169,7 @@ int main (int argc, char *argv[])
 			} else if (msg[length-1] == '\0')
 				break;
 		}
-		// TODO: Log chat window in client.
+
 		message_received:
 		if (!strncmp(msg, "S|", 2)) {
 			wprintw(chat_window, "%s\n", msg+2);

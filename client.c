@@ -2,6 +2,7 @@
 #include <ncurses.h>
 #include <form.h>
 #include <stdlib.h>
+#include <time.h>
 #include <string.h>
 #include <unistd.h>
 #include <errno.h>
@@ -27,7 +28,7 @@ void exit_client()
 {
 	endwin();
 	if (sock) {
-		send(sock, "D", strlen("D"), 0);
+		send(sock, "D", 1, 0);
 		close(sock);
 	}
 	if (log_file)
@@ -95,14 +96,16 @@ void * input_thread()
 				werase(input_window);
 
 				break;
-			case 127:
-				form_driver(message_form, REQ_DEL_PREV);
-				break;
-			case KEY_LEFT:
-				form_driver(message_form, REQ_PREV_CHAR);
-				break;
-			case KEY_RIGHT:
-				form_driver(message_form, REQ_NEXT_CHAR);
+
+			// TODO: Prevent control characters from being printed when using arrow keys.
+			case 27:
+				if (wgetch(input_window) == '[') {
+					char ch_esc = wgetch(input_window);
+					if (ch_esc == 'D')
+						form_driver(message_form, REQ_PREV_CHAR);
+					else if (ch_esc == 'C')
+						form_driver(message_form, REQ_NEXT_CHAR);
+				}
 				break;
 			default:
 				form_driver(message_form, ch);

@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdarg.h>
 #include <stdlib.h>
+#include <time.h>
 #include <string.h>
 #include <unistd.h>
 #include <errno.h>
@@ -129,13 +130,32 @@ void * client_thread(void *cli)
 			pthread_exit(NULL);
 		}
 		if (!strncmp(msg, "M|", 2)) {
-			char user_msg[MAXBUFSIZE] = "S|";
-			strcat(user_msg, "[");
-			strcat(user_msg, cl->user_name);
-			strcat(user_msg, "] ");
-			strcat(user_msg, msg+2);
-			printf_log(user_msg+2);
-			broadcast_message(user_msg);
+			if (!strncmp(msg+2, "/", 1)) {
+				if (!strncmp(msg+3, "list", 4)) {
+					char list_msg[MAXBUFSIZE] = "S|";
+					strcat(list_msg, "Users Online (");
+					sprintf(list_msg+strlen(list_msg), "%i", num_of_clients);
+					strcat(list_msg, "): ");
+					int users_online = 0;
+					for (int i = 0; i < MAXCLIENTS; i++) {
+						if (clients[i].user_sock != 0) {
+							if (users_online != 0)
+								strcat(list_msg, ", ");
+							strcat(list_msg, clients[i].user_name);
+							users_online++;
+						}
+					}
+					send(cl->user_sock, list_msg, strlen(list_msg)+1, 0);
+				}
+			} else { 
+				char user_msg[MAXBUFSIZE] = "S|";
+				strcat(user_msg, "[");
+				strcat(user_msg, cl->user_name);
+				strcat(user_msg, "] ");
+				strcat(user_msg, msg+2);
+				printf_log(user_msg+2);
+				broadcast_message(user_msg);
+			}
 		}
 	}
 	return NULL;
@@ -158,9 +178,6 @@ void add_client(int client_sock, struct sockaddr_in client_addr)
 		return;
 	}
 
-	pthread_attr_init(&attr);
-	pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
-
 	clients[num_of_clients].user_sock = client_sock;
 	clients[num_of_clients].client_addr = client_addr;
 	pthread_create(&clients[num_of_clients].cli_thread,
@@ -169,6 +186,8 @@ void add_client(int client_sock, struct sockaddr_in client_addr)
 				   &clients[num_of_clients]);
 
 	recv_len = recv(client_sock, &msg, sizeof(msg), MSG_DONTWAIT);
+
+	// TODO: Enforce DRY.
 
 	if (recv_len <= 0 &&
 			errno != EWOULDBLOCK) {
@@ -194,9 +213,9 @@ void add_client(int client_sock, struct sockaddr_in client_addr)
 				set_username(&clients[num_of_clients], anon_user_name);
 				strcpy(user_name, anon_user_name);
 				if (ret == 1)
-					strcat(name_set_error_msg, "Your username is too large.");
+					strcat(name_set_error_msg, "Your selected username is too large.");
 				else if (ret == 2)
-					strcat(name_set_error_msg, "Your username is already used.");
+					strcat(name_set_error_msg, "Your selected username is in use.");
 				send(client_sock, name_set_error_msg, strlen(name_set_error_msg)+1, 0);
 			} else {
 				strcpy(user_name, msg+2);
@@ -214,10 +233,10 @@ void add_client(int client_sock, struct sockaddr_in client_addr)
 
 int main (int argc, char *argv[])
 {
-	char message[MAXBUFSIZE];
+	char startup_msg[MAXBUFSIZE];
 	struct sockaddr_in server;
-	int client_sock;
 	struct sockaddr_in client_addr;
+	int client_sock;
 
 	if (argc > 1)
 		if (!strcmp(argv[1], "--help")) {
@@ -241,6 +260,9 @@ int main (int argc, char *argv[])
 
 	signal(SIGINT, exit_server);
 
+	pthread_attr_init(&attr);
+	pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
+
 	sock = socket(AF_INET, SOCK_STREAM, 0);
 
 	server.sin_family = AF_INET;
@@ -248,15 +270,15 @@ int main (int argc, char *argv[])
 	server.sin_port = htons(PORT);
 
 	if (bind(sock, (struct sockaddr *)&server, sizeof(struct sockaddr))) {
-		snprintf(message, MAXBUFSIZE, "Failed to bind to IP address %s on port %i: %s", 
-				inet_ntoa(server.sin_addr), ntohs(server.sin_port), strerror(errno));
-		printf_log(message);
+		snprintf(startup_msg, MAXBUFSIZE, "Failed to bind to IP address %s on port %i: %s", 
+					inet_ntoa(server.sin_addr), ntohs(server.sin_port), strerror(errno));
+		printf_log(startup_msg);
 		exit(1);
 	}
 
-	snprintf(message, MAXBUFSIZE, "Bound to IP address %s on port %i",
-			inet_ntoa(server.sin_addr), ntohs(server.sin_port));
-	printf_log(message);
+	snprintf(startup_msg, MAXBUFSIZE, "Bound to IP address %s on port %i",
+				inet_ntoa(server.sin_addr), ntohs(server.sin_port));
+	printf_log(startup_msg);
 	listen(sock, 1);
 
 	num_of_clients = 0;

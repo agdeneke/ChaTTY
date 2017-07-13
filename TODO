@@ -2,18 +2,19 @@ Server:
 
 - Add user commands.
 	- /list (DONE)
-	- /me
-- Add logged-in users.
-- Add moderators.
+	- /me (DONE)
+	- /help
+- Fix username being marked as used.
 
 Client:
 
 - Prevent control characters from being printed when using arrow keys.
 - Log chat window in client.
 - Wait for client user to send SIGINT before exiting client.
-- Use UTF-8 for chat messages.
 
 Both:
 - Log times.
+- Optimize code for performance.
 - Check string bounds.
+- Check for race conditions.
 - Enforce DRY.

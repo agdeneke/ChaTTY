@@ -36,7 +36,7 @@ pthread_attr_t attr;
 
 struct client clients[MAXCLIENTS];
 
-FILE *log_file, *users_file;
+FILE *log_file;
 
 void printf_log(const char *message)
 {
@@ -60,7 +60,7 @@ int set_username(struct client *cli, char *user_name)
 		return 1;
 
 	for (int i = 0; i < MAXCLIENTS; i++)
-		if (!strcmp(clients[i].user_name, user_name))
+		if (clients[i].user_sock != 0 && !strcmp(clients[i].user_name, user_name))
 			return 2;
 
 	strcpy(cli->user_name, user_name);
@@ -86,7 +86,7 @@ void disconnect_client(struct client *cli, enum disc_reason reason)
 
 	strcat(disc_msg, ")");
 
-	memset(cli, '\0', sizeof(*cli));
+	cli->user_sock = 0;
 
 	printf_log(disc_msg+2);
 	broadcast_message(disc_msg);
@@ -107,8 +107,6 @@ void exit_server()
 		close(sock);
 	if (log_file != NULL)
 		fclose(log_file);
-	if (users_file != NULL)
-		fclose(users_file);
 	pthread_attr_destroy(&attr);
 
 	exit(0);
@@ -131,7 +129,11 @@ void * client_thread(void *cli)
 		}
 		if (!strncmp(msg, "M|", 2)) {
 			if (!strncmp(msg+2, "/", 1)) {
-				if (!strncmp(msg+3, "list", 4)) {
+				if (!strncmp(msg+3, "help", 4)) {
+					char help_msg[MAXBUFSIZE] = "S|";
+					strcat(help_msg, "To Be Implemented");
+					send(cl->user_sock, help_msg, strlen(help_msg)+1, 0);
+				} else if (!strncmp(msg+3, "list", 4)) {
 					char list_msg[MAXBUFSIZE] = "S|";
 					strcat(list_msg, "Users Online (");
 					sprintf(list_msg+strlen(list_msg), "%i", num_of_clients);
@@ -146,6 +148,15 @@ void * client_thread(void *cli)
 						}
 					}
 					send(cl->user_sock, list_msg, strlen(list_msg)+1, 0);
+				} else if (!strncmp(msg+3, "me", 2)) {
+					if (strlen(msg) > 6 && *(msg+5) == ' ') {
+						char me_msg[MAXBUFSIZE] = "S|";
+						strcat(me_msg, cl->user_name);
+						strcat(me_msg, " ");
+						strcat(me_msg, msg+6);
+						printf_log(me_msg+2);
+						broadcast_message(me_msg);
+					}
 				}
 			} else { 
 				char user_msg[MAXBUFSIZE] = "S|";
@@ -248,14 +259,6 @@ int main (int argc, char *argv[])
 	// TODO: Log times.
 	log_file = fopen("server.log", "w");
 
-	// TODO: Add logged-in users.
-	// TODO: Add moderators.
-	if ((users_file = fopen("users.txt", "r+")) == NULL)
-		if ((users_file = fopen("users.txt", "w+")) == NULL) {
-			printf_log("Failed to open/create users.txt file.");
-			exit(1);
-		}
-
 	printf_log("Initializing ChaTTY server...");
 
 	signal(SIGINT, exit_server);
@@ -279,6 +282,7 @@ int main (int argc, char *argv[])
 	snprintf(startup_msg, MAXBUFSIZE, "Bound to IP address %s on port %i",
 				inet_ntoa(server.sin_addr), ntohs(server.sin_port));
 	printf_log(startup_msg);
+
 	listen(sock, 1);
 
 	num_of_clients = 0;

@@ -5,6 +5,7 @@ Server:
 	- /me (DONE)
 	- /help
 - Fix username being marked as used.
+- Fix messages only being broadcast every other message.
 
 Client:
 
@@ -13,8 +14,7 @@ Client:
 - Wait for client user to send SIGINT before exiting client.
 
 Both:
-- Log times.
+- Log timestamps.
 - Optimize code for performance.
 - Check string bounds.
 - Check for race conditions.
-- Enforce DRY.

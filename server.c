@@ -118,11 +118,17 @@ void * client_thread(void *cli)
 
 	while (1) {
 		char msg[MAXBUFSIZE] = "";
+		long length = 0;
 
-		if (recv(cl->user_sock, &msg, sizeof(msg), 0) <= 0) {
-			disconnect_client(cl, disc_crash);
-			pthread_exit(NULL);
+		while (1) {
+			length += recv(cl->user_sock, &msg+length, sizeof(msg)-length, 0);
+			if (length <= 0) {
+				disconnect_client(cl, disc_crash);
+				pthread_exit(NULL);
+			} else if (msg[length-1] == '\0')
+				break;
 		}
+		
 		if (!strncmp(msg, "D", 1)) {
 			disconnect_client(cl, disc_leave);
 			pthread_exit(NULL);
@@ -168,18 +174,37 @@ void * client_thread(void *cli)
 				broadcast_message(user_msg);
 			}
 		}
+		if (!strncmp(msg, "U|", 2)) {
+			char user_name[MAXUSERNAMESIZE];
+			int ret = set_username(cli, msg+2);
+			if (ret != 0) {
+				char name_set_error_msg[MAXBUFSIZE] = "S|";
+				if (ret == 1)
+					strcat(name_set_error_msg, "Your selected username is too large.");
+				else if (ret == 2)
+					strcat(name_set_error_msg, "Your selected username is in use.");
+				send(cl->user_sock, name_set_error_msg, strlen(name_set_error_msg)+1, 0);
+			} else {
+				strcpy(user_name, msg+2);
+			}
+		}
+
+		for (int i = 0; i < length-1; i++)
+			if (msg[i] == '\0') {
+				memmove(msg, msg+i+1, strlen(msg+i+1)+1);
+				length = strlen(msg);
+			}
 	}
+
 	return NULL;
 }
 
 void add_client(int client_sock, struct sockaddr_in client_addr)
 {
 	static int anon_num;
-	int recv_len;
 	char connect_msg_ip[MAXBUFSIZE];
 	char connect_msg[MAXBUFSIZE];
 	char msg[MAXUSERNAMESIZE+2];
-	char user_name[MAXUSERNAMESIZE];
 	char anon_user_name[MAXUSERNAMESIZE] = "Anonymous #";
 
 	if (num_of_clients >= MAXCLIENTS) {
@@ -196,48 +221,16 @@ void add_client(int client_sock, struct sockaddr_in client_addr)
 				   &client_thread,
 				   &clients[num_of_clients]);
 
-	recv_len = recv(client_sock, &msg, sizeof(msg), MSG_DONTWAIT);
+	snprintf(anon_user_name+strlen(anon_user_name),
+				MAXUSERNAMESIZE-strlen(anon_user_name),
+				"%i",
+				(anon_num++ + 1));
+	set_username(&clients[num_of_clients], anon_user_name);
 
-	// TODO: Enforce DRY.
-
-	if (recv_len <= 0 &&
-			errno != EWOULDBLOCK) {
-		close(client_sock);
-		return;
-	} else if (errno == EWOULDBLOCK) {
-		char name_set_error_msg[MAXBUFSIZE] = "S|";
-		snprintf(anon_user_name+strlen(anon_user_name),
-					MAXUSERNAMESIZE-strlen(anon_user_name),
-					"%i",
-					(anon_num++ + 1));
-		set_username(&clients[num_of_clients], anon_user_name);
-		strcpy(user_name, anon_user_name);
-	} else if (recv_len > 0) {
-		if (!strncmp(msg, "U|", 2)) {
-			int ret = set_username(&clients[num_of_clients], msg+2);
-			if (ret != 0) {
-				char name_set_error_msg[MAXBUFSIZE] = "S|";
-				snprintf(anon_user_name+strlen(anon_user_name),
-							MAXUSERNAMESIZE-strlen(anon_user_name),
-							"%i",
-							(anon_num++ + 1));
-				set_username(&clients[num_of_clients], anon_user_name);
-				strcpy(user_name, anon_user_name);
-				if (ret == 1)
-					strcat(name_set_error_msg, "Your selected username is too large.");
-				else if (ret == 2)
-					strcat(name_set_error_msg, "Your selected username is in use.");
-				send(client_sock, name_set_error_msg, strlen(name_set_error_msg)+1, 0);
-			} else {
-				strcpy(user_name, msg+2);
-			}
-		}
-	}
-
-	snprintf(connect_msg_ip, MAXBUFSIZE, "Client %s is connecting as %s", inet_ntoa(clients[num_of_clients].client_addr.sin_addr), user_name);
+	snprintf(connect_msg_ip, MAXBUFSIZE, "Client %s is connecting as %s", inet_ntoa(clients[num_of_clients].client_addr.sin_addr), anon_user_name);
 	printf_log(connect_msg_ip);
 
-	snprintf(connect_msg, MAXBUFSIZE, "S|%s (%i/%i) has connected.", user_name, (num_of_clients++ + 1), MAXCLIENTS);
+	snprintf(connect_msg, MAXBUFSIZE, "S|%s (%i/%i) has connected.", anon_user_name, (num_of_clients++ + 1), MAXCLIENTS);
 	printf_log(connect_msg+2);
 	broadcast_message(connect_msg);
 }
